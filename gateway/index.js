@@ -2,47 +2,73 @@ const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline');
 const readline = require('readline');
 
-const portPath = 'COM3'; 
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const helmet = require('helmet');
 
-const port = new SerialPort({
-  path: portPath,
-  baudRate: 115200,
+
+const portPath = 'COM3'; 
+const serialPort = new SerialPort({ 
+    path: portPath, 
+    baudRate: 115200 
 });
 
-const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
+const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\n' }));
 
+const app = express();
+app.use(helmet());
 
+const corsOptions = {
+  origin: 'http://localhost:3000',
+  methods: ['GET', 'POST']
+};
+app.use(cors(corsOptions));
+
+const server = http.createServer(app);
+const io = new Server(server, { cors: corsOptions });
+
+//=======
+// hardware communication
 function sendCommand(command) {
-  if (port.isOpen) {
+  const allowedCommands = ['led_on', 'led_off'];
+  if (!allowedCommands.includes(command)) {
+    console.warn(`[security] blocked invalid command: ${command}`);
+    return;
+  }
+
+  if (serialPort.isOpen) {
     console.log(`[gateway -> node] Executing: ${command}`);
-    port.write(`${command}\n`, (err) => {
-      if (err) {
-        console.error('[gateway] Failed to write to serial port:', err.message);
-      }
-    });
-  } else {
-    console.error('[gateway] Cannot send command: Serial port is closed.');
+    serialPort.write(`${command}\n`);
   }
 }
 
 
-port.on('open', () => {
-  console.log(`[gateway] connected to edge node on ${portPath}`);
+io.on('connection', (socket) => {
+  console.log(`[gateway] dashboard client connected: ${socket.id}`);
+
+  socket.on('toggle_actuator', (data) => {
+    if (data === 'ON') sendCommand('led_on');
+    else if (data === 'OFF') sendCommand('led_off');
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`[gateway] client disconnected: ${socket.id}`);
+  });
 });
 
 parser.on('data', (data) => {
   try {
     const parsedData = JSON.parse(data.trim());
-    console.log('[node -> gateway] ', parsedData);
-
-
+    io.emit('telemetry', parsedData); 
   } catch (err) {
-    console.log('[node -> gateway] err:', data.trim());
+    console.error(`[gateway] err parsing serial data: ${err.message}`);
   }
 });
 
-port.on('error', (err) => {
-  console.error('[gateway] Serial Error: ', err.message);
+server.listen(4000, () => {
+  console.log('[gateway] secure server on http://localhost:4000');
 });
 
 //==================
