@@ -8,6 +8,8 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const helmet = require('helmet');
 
+const net = require('net'); // for QEMU TCP communication
+
 
 const portPath = 'COM3'; 
 const serialPort = new SerialPort({ 
@@ -28,6 +30,34 @@ app.use(cors(corsOptions));
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: corsOptions });
+
+
+//=== QEMU tcp bridge set up===
+let secureWorldSocket = null;
+
+const tcpServer = net.createServer((socket) => {
+  console.log('[gateway] optee on qemu connected via TCP');
+  secureWorldSocket = socket;
+
+  // listen for hashed/signed data coming back from optee
+  socket.on('data', (data) => {
+    console.log(`[gateway <- optee] hash: ${data.toString()}`);
+    // emit data to dashboard (react)
+    io.emit('secure_telemetry', { status: 'Verified', hash: data.toString() });
+  });
+
+  socket.on('error', (err) => console.error('[gateway] TCP err:', err.message));
+  socket.on('close', () => {
+    console.log('[gateway] optee on qemu disconnected');
+    secureWorldSocket = null;
+  });
+});
+
+tcpServer.listen(5000, '0.0.0.0', () => {
+  console.log('[gateway] TCP server listening for QEMU on port 5000');
+});
+
+
 
 //=======
 // hardware communication
@@ -58,17 +88,32 @@ io.on('connection', (socket) => {
   });
 });
 
+// parser.on('data', (data) => {
+//   try {
+//     const parsedData = JSON.parse(data.trim());
+//     io.emit('telemetry', parsedData); 
+//   } catch (err) {
+//     console.error(`[gateway] err parsing serial data: ${err.message}`);
+//   }
+// });
+
 parser.on('data', (data) => {
   try {
-    const parsedData = JSON.parse(data.trim());
-    io.emit('telemetry', parsedData); 
+    const rawTelemetry = data.trim();
+    console.log(`[edge -> gateway] Raw: ${rawTelemetry}`);
+
+    // when QEMU is connected, pipe data directly to optee
+    if (secureWorldSocket) {
+      secureWorldSocket.write(rawTelemetry);
+    } else {
+      console.warn('[gateway] optee on qemu offline. dropping telemetry');
+    }
   } catch (err) {
-    console.error(`[gateway] err parsing serial data: ${err.message}`);
   }
-});
+}); 
 
 server.listen(4000, () => {
-  console.log('[gateway] secure server on http://localhost:4000');
+  console.log('[gateway] HTTP & WebSocket server listening on port 4000');
 });
 
 //==================
