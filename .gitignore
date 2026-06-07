@@ -3,3 +3,13 @@ build
 
 node_modules
 dist
+
+secure_world/host/*.o
+secure_world/ta/*.o
+secure_world/ta/*.ta
+secure_world/ta/*.dmp
+secure_world/ta/*.map
+secure_world/ta/*.elf
+
+.DS_Store
+Thumbs.db
