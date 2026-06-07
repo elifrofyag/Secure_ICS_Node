@@ -28,9 +28,45 @@ If you haven't successfully run a CMake configuration yet, the file doesn't exis
 ### test
 open a Serial Monitor (like PuTTY, or the one built into VS Code) connected to the Pico's COM port -> should see the JSON telemetry streaming in, and typing `led_on` with appropriate line ending will trigger LED.
 
-## run gateway
+## run gateway (server)
+1. open a terminal, navigate to the `gateway` folder, and run `npm install` to install dependencies.
+2. run `node server.js` to start the gateway server
 
+## run dashboard (client)
+1. open another terminal, navigate to the `dashboard` folder, and run `npm install` to install dependencies.
+2. run `npm start` and open `http://localhost:3000` in your browser to view the dashboard
 
+## run QEMU and OP-TEE (secure world)
+0. make sure you have QEMU installed and set up to work with OP-TEE (follow this guide: https://optee.readthedocs.io/en/latest/building/devices/qemu.html#qemu-v7) - may take a lot of time to build everything the first time. 
+
+1. open ubuntu terminal
+check `echo $(ip route show default | awk '{print $3}')` to get your host IP address, then replace `HOST_IP` in the command below and run in the same terminal:
+```bash
+    $ nc -vz HOST_IP 5000
+```
+if you see "succeeded", it means the gateway server is ready to accept TCP connections from QEMU. otherwise, check your firewall settings by Allow an app through Windows Firewall -> add "Node.js JavaScript Runtime" and make sure both Private and Public are checked.
+2. run below to forward TCP traffic from QEMU to the gateway server
+```bash
+    socat TCP-LISTEN:5000,reuseaddr,fork TCP:$(ip route show default | awk '{print $3}'):5000
+```
+3. open another wsl/ubuntu terminal, run below to build and run optee on qemu
+```bash
+    ~/optee-qemu/build$ make run-only
+```
+then 2 terminals will spawn up, one for Secure World (OP-TEE) and one for Normal World (Linux). Should see `(qemu)` on the terminal, key in `c`.
+
+4. in the Normal World terminal, type `root` to login and run
+```bash
+    optee_secure_ics
+```
+
+## tips
+- if main project repo is on Windows drive, but QEMU build environment in inside WSL2 filesystem; but you still want to track changes in the secure_world C code in optee with git, then
+```bash
+    echo 'cp -r /mnt/d/path/to/Secure-ICS-Node/secure_world/* ~/optee-qemu/optee_examples/secure_ics/ && cd ~/optee-qemu/build && make -j4 && make run-only' > ~/run_ics.sh
+    chmod +x ~/run_ics.sh
+```
+then simply run `~/run_ics.sh` every time you make changes to the secure_world code on windows, since it will auto grab latest code from Windows, copy it to optee, build and run it.
 
 # sources
 https://pip-assets.raspberrypi.com/categories/609-microcontroller-boards/documents/RP-009085-KB-1-raspberry-pi-pico-c-sdk.pdf
@@ -38,3 +74,7 @@ https://pip-assets.raspberrypi.com/categories/609-microcontroller-boards/documen
 https://pip-assets.raspberrypi.com/categories/610-raspberry-pi-pico/documents/RP-008276-DS-1-getting-started-with-pico.pdf
 
 https://pip-assets.raspberrypi.com/categories/610-raspberry-pi-pico/documents/RP-008307-DS-1-pico-datasheet.pdf
+
+
+echo 'cp -r /mnt/d/An_Nguyen_Van/Documents/ANN_Folder/CSE/Secure_ICS_Node/secure_world/* ~/optee-qemu/optee_examples/secure_ics/ && cd ~/optee-qemu/build && make -j4 && make run-only' > ~/run_ics.sh
+chmod +x ~/run_ics.sh
