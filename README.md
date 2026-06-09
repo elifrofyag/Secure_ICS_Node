@@ -5,9 +5,12 @@ A simple implementation of a secure ICS node using the Raspberry Pi Pico (no wif
 ### wiring
 
 ### install
+**NOTE: for simplicity, i have included the secure_node/secure_node.uf2 -> just need to hold down `BOOTSEL` button on Pico, plug it into computer via USB, and release button, then drag and drop the .uf2 file onto it. Pico will automatically reboot and start running C code. then skip the build steps below and move on to the "test" section.**
+
+
 1. on windows, get VSCode and install extensions "C/C++ Extension Pack" and "Raspberry Pi Pico" and "CMake Tools"; or following this guide: https://datasheets.raspberrypi.com/pico/getting-started-with-pico.pdf
 2. clone this repo and open in VSCode
-3. If you have the CMake Tools extension installed, it will ask you to select a "Kit" (choose the GCC for arm-none-eabi option)
+3. It will ask you to innit Pico Project, and when asked to  select a "Kit", choose the GCC for `arm-none-eabi` option
 
 ### configure
 Generate the compile_commands.json file
@@ -30,7 +33,7 @@ open a Serial Monitor (like PuTTY, or the one built into VS Code) connected to t
 
 ## run gateway (server)
 1. open a terminal, navigate to the `gateway` folder, and run `npm install` to install dependencies.
-2. run `node server.js` to start the gateway server
+2. run `node index.js` to start the gateway server
 
 ## run dashboard (client)
 1. open another terminal, navigate to the `dashboard` folder, and run `npm install` to install dependencies.

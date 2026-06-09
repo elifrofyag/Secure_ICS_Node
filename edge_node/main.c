@@ -6,6 +6,14 @@
 #define LED_PIN 15 // normal onboard led is gpio 25
 #define SOIL_MOISTURE_PIN 26
 
+// some controllers will have this psk will be physically burned into the device
+// for pico, i hardcode it here for simplicity
+const char* DEVICE_PSK = "HMAC_PSK_pico_optee"; 
+
+void hmac_sha256(const uint8_t *key, size_t key_len, 
+                 const uint8_t *data, size_t data_len, 
+                 uint8_t *mac_out);
+
 int main() {
     // init standard i/o (routes printf and getchar over USB Serial)
     stdio_init_all();
@@ -29,7 +37,22 @@ int main() {
         // send tele every 2s (nonblocking delay)
         if (current_time - last_telemetry_time > 2000000) {
             uint16_t soil_moisture = adc_read();
-            printf("{\"soil_moisture\": %d}\n", soil_moisture);
+
+            char raw_payload[64];
+            snprintf(raw_payload, sizeof(raw_payload), "{\"soil_moisture\": %d}", soil_moisture);
+
+            uint8_t mac_out[32];
+            hmac_sha256((const uint8_t*)DEVICE_PSK, strlen(DEVICE_PSK), 
+                        (const uint8_t*)raw_payload, strlen(raw_payload), 
+                        mac_out);
+
+            // convert 32 byte mac to 64char hex string
+            char hex_mac[65] = {0};
+            for(int i = 0; i < 32; i++) {
+                sprintf(&hex_mac[i * 2], "%02x", mac_out[i]);
+            }
+            printf("{\"payload\": %s, \"hmac\": \"%s\"}\n", raw_payload, hex_mac);
+
             last_telemetry_time = current_time;
         }
 
