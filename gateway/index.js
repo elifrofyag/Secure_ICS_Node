@@ -39,9 +39,9 @@ const tcpServer = net.createServer((socket) => {
   console.log('[gateway] optee on qemu connected via TCP');
   secureWorldSocket = socket;
 
-  // listen for hashed/signed data coming back from optee
+  // listen for signed data coming back from optee
   socket.on('data', (data) => {
-    console.log(`[gateway <- optee] hash: ${data.toString()}`);
+    console.log(`[gateway <- optee] signature: ${data.toString()}`);
     // emit data to dashboard (react)
     io.emit('secure_telemetry', { status: 'Verified', hash: data.toString() });
   });
@@ -100,17 +100,23 @@ io.on('connection', (socket) => {
 parser.on('data', (data) => {
   try {
     const rawTelemetry = data.trim();
-    console.log(`[edge -> gateway] Raw: ${rawTelemetry}`);
+    console.log(`[Edge -> Gateway] Raw: ${rawTelemetry}`);
 
-    // when QEMU is connected, pipe data directly to optee
-    if (secureWorldSocket) {
-      secureWorldSocket.write(rawTelemetry);
-    } else {
-      console.warn('[gateway] optee on qemu offline. dropping telemetry');
+    const match = rawTelemetry.match(/{"payload": (.*), "hmac": "(.*)"}/);
+    
+    if (match && secureWorldSocket) {
+      const exactPayload = match[1].trim();
+      const exactHmac = match[2].trim();
+      
+      // pipe data to optee w format payload|hmac\n
+      secureWorldSocket.write(`${exactPayload}|${exactHmac}\n`);
+    } else if (!secureWorldSocket) {
+      console.warn('[gateway] optee offline. dropping telemetry');
     }
   } catch (err) {
+    console.error('[gateway] Data err:', err.message);
   }
-}); 
+});
 
 server.listen(4000, () => {
   console.log('[gateway] HTTP & WebSocket server listening on port 4000');
