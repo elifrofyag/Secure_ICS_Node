@@ -8,7 +8,7 @@
 
 // some controllers will have this psk will be physically burned into the device
 // for pico, i hardcode it here for simplicity
-const char* DEVICE_PSK = "HMAC_PSK_pico_optee"; 
+const char* DEVICE_PSK = "HMAC_PresharedSecretKeyPicoOptee"; 
 
 void hmac_sha256(const uint8_t *key, size_t key_len, 
                  const uint8_t *data, size_t data_len, 
