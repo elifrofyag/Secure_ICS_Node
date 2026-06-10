@@ -60,36 +60,58 @@ int main(void)
     while (1) {
         memset(buffer, 0, sizeof(buffer));
         int valread = read(sock, buffer, 255);
-        
         if (valread <= 0) {
             printf("[host] Gateway disconnected. Exiting.\n");
             break;
         }
 
-        printf("[host <- gateway] Received: %s\n", buffer);
+        buffer[strcspn(buffer, "\n")] = 0; // remove newline if exist
 
-        // prep TEE parameters for hashing
-        memset(&op, 0, sizeof(op));
-        op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT, TEEC_MEMREF_TEMP_OUTPUT, TEEC_NONE, TEEC_NONE);
-        op.params[0].tmpref.buffer = buffer;
-        op.params[0].tmpref.size = strlen(buffer);
-        op.params[1].tmpref.buffer = hash_output;
-        op.params[1].tmpref.size = sizeof(hash_output);
+        char *payload_str = buffer;
+        char *hmac_str = strchr(buffer, '|');
 
-        // invoke Secure World 
-        res = TEEC_InvokeCommand(&sess, TA_SECURE_ICS_CMD_HASH_TELEMETRY, &op, &err_origin);
-        
-        if (res == TEEC_SUCCESS) {
-            // binary hash to Hex string to send over TCP
-            for (int i = 0; i < 32; i++) {
-                sprintf(&hex_hash_str[i * 2], "%02x", hash_output[i]);
-            }
+        if (hmac_str != NULL){
+            *hmac_str = '\0'; // replace '|' with null to split 
+            hmac_str++;       // move ptr to  start of hmac
+
+            printf("[host <- gateway] verifying payload: %s (Len: %zu)\n", payload_str, strlen(payload_str));
             
-            // send hash back to Node.js gateway
-            send(sock, hex_hash_str, strlen(hex_hash_str), 0);
-            printf("[host -> gateway] Sent Hash: %s\n", hex_hash_str);
-        } else {
-            printf("[host] crypto failure in Secure World.\n");
+            // param 0 raw payload to verify
+            // param 1 Pico's HMAC to check against
+            // param 2: output buffer for optee's secure signature
+            memset(&op, 0, sizeof(op));
+            op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT, 
+                                             TEEC_MEMREF_TEMP_INPUT, 
+                                             TEEC_MEMREF_TEMP_INOUT, 
+                                             TEEC_NONE);
+                                             
+            op.params[0].tmpref.buffer = payload_str;
+            op.params[0].tmpref.size = strlen(payload_str);
+            
+            op.params[1].tmpref.buffer = hmac_str;
+            op.params[1].tmpref.size = strlen(hmac_str);
+            
+            op.params[2].tmpref.buffer = hash_output;
+            op.params[2].tmpref.size = sizeof(hash_output);
+            
+            // invoke Secure World 
+            res = TEEC_InvokeCommand(&sess, TA_SECURE_ICS_CMD_HASH_TELEMETRY, &op, &err_origin);
+
+            if (res == TEEC_SUCCESS) {
+            // optee signature to Hex string to send over TCP
+                for (int i = 0; i < 32; i++) {
+                    sprintf(&hex_hash_str[i * 2], "%02x", hash_output[i]);
+                }
+            
+                // send hash back to Node.js gateway
+                send(sock, hex_hash_str, strlen(hex_hash_str), 0);
+                printf("[host -> gateway] verification success. signature sent: %s\n", hex_hash_str);
+            } else {
+                printf("[host] TEEC_InvokeCommand failed: 0x%x, origin: 0x%x\n", res, err_origin);
+                printf("[host] optee rejected payload signature\n");
+                send(sock, "ERROR_INVALID_SIGNATURE\n", 24, 0);
+            }
+
         }
     }
 
