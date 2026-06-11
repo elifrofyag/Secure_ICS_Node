@@ -1,9 +1,12 @@
 # Secure ICS Node on Raspberry Pi Pico
-A simple implementation of a secure ICS node using the Raspberry Pi Pico (no wifi + no bluetooth) microcontroller. The node reads soil moisture data from an ADC, sends telemetry data over USB Serial, and listens for commands to control an LED.
+A simple implementation/prototype to model a secure ICS architecture with readily available resources QEMU-based OP-TEE on Windows host computer and Raspberry Pi Pico (no wifi + no bluetooth) microcontroller. 
+
+![architecture](/assets/telemetry_flow.png)
+
 
 ## 1. set up and run hardware
 ### wiring
-
+![wiring](/assets/wiring_pico.png)
 ### install
 **NOTE: for simplicity, i have included the secure_node/secure_node.uf2 -> just need to hold down `BOOTSEL` button on Pico, plug it into computer via USB, and release button, then drag and drop the .uf2 file onto it. Pico will automatically reboot and start running C code. then skip the build steps below and move on to the "test" section.**
 
@@ -31,15 +34,15 @@ If you haven't successfully run a CMake configuration yet, the file doesn't exis
 ### test
 open a Serial Monitor (like PuTTY, or the one built into VS Code) connected to the Pico's COM port -> should see the JSON telemetry streaming in, and typing `led_on` with appropriate line ending will trigger LED.
 
-## run gateway (server)
+## 2. run gateway (server)
 1. open a terminal, navigate to the `gateway` folder, and run `npm install` to install dependencies.
 2. run `node index.js` to start the gateway server
 
-## run dashboard (client)
+## 3. run dashboard (client)
 1. open another terminal, navigate to the `dashboard` folder, and run `npm install` to install dependencies.
 2. run `npm start` and open `http://localhost:3000` in your browser to view the dashboard
 
-## run QEMU and OP-TEE (secure world)
+## 4. run QEMU and OP-TEE (secure world)
 0. make sure you have QEMU installed and set up to work with OP-TEE (follow this guide: https://optee.readthedocs.io/en/latest/building/devices/qemu.html#qemu-v7) - may take a lot of time to build everything the first time. 
 
 1. open ubuntu terminal
@@ -71,13 +74,18 @@ then 2 terminals will spawn up, one for Secure World (OP-TEE) and one for Normal
 ```
 then simply run `~/run_ics.sh` every time you make changes to the secure_world code on windows, since it will auto grab latest code from Windows, copy it to optee, build and run it.
 
+# progress so far:
+1. wiring
+![real wiring](/assets/real_wiring.jpg)
+2. pico successfully sending telemetry over usb serial to gateway server
+![putty](/assets/putty_serial.png)
+3. gateway server successfully receiving telemetry and forwarding to optee on qemu via TCP, then receive reponses back from optee
+![gateway](/assets/gateway_terminal.png)
+4. optee successfully receiving telemetry from gateway, verify HMAC, signs telemetry, and sending back responses to gateway
+![optee](/assets/optee_terminal.png)
 # sources
 https://pip-assets.raspberrypi.com/categories/609-microcontroller-boards/documents/RP-009085-KB-1-raspberry-pi-pico-c-sdk.pdf
 
 https://pip-assets.raspberrypi.com/categories/610-raspberry-pi-pico/documents/RP-008276-DS-1-getting-started-with-pico.pdf
 
 https://pip-assets.raspberrypi.com/categories/610-raspberry-pi-pico/documents/RP-008307-DS-1-pico-datasheet.pdf
-
-
-echo 'cp -r /mnt/d/An_Nguyen_Van/Documents/ANN_Folder/CSE/Secure_ICS_Node/secure_world/* ~/optee-qemu/optee_examples/secure_ics/ && cd ~/optee-qemu/build && make -j4 && make run-only' > ~/run_ics.sh
-chmod +x ~/run_ics.sh
